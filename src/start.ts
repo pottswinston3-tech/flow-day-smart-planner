@@ -17,6 +17,19 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
   }
 });
 
+// Attach the DayFlow session token (custom Student ID/PIN auth) from localStorage
+// to every server function call as `Authorization: Bearer <token>`.
+const attachDayflowSession = createMiddleware({ type: "function" }).client(
+  async ({ next }) => {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("dayflow.session") : null;
+    return next({
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  },
+);
+
 export const startInstance = createStart(() => ({
   requestMiddleware: [errorMiddleware],
+  functionMiddleware: [attachDayflowSession],
 }));
