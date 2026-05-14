@@ -14,7 +14,283 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      classes: {
+        Row: {
+          color: string
+          created_at: string
+          days: number[]
+          end_time: string
+          id: string
+          name: string
+          notes: string | null
+          period: string | null
+          room: string | null
+          start_time: string
+          student_uuid: string
+          subject: string | null
+          teacher: string | null
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          days?: number[]
+          end_time: string
+          id?: string
+          name: string
+          notes?: string | null
+          period?: string | null
+          room?: string | null
+          start_time: string
+          student_uuid: string
+          subject?: string | null
+          teacher?: string | null
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          days?: number[]
+          end_time?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          period?: string | null
+          room?: string | null
+          start_time?: string
+          student_uuid?: string
+          subject?: string | null
+          teacher?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "classes_student_uuid_fkey"
+            columns: ["student_uuid"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      links: {
+        Row: {
+          created_at: string
+          icon: string | null
+          id: string
+          label: string
+          pinned: boolean
+          sort_order: number
+          student_uuid: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          icon?: string | null
+          id?: string
+          label: string
+          pinned?: boolean
+          sort_order?: number
+          student_uuid: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          icon?: string | null
+          id?: string
+          label?: string
+          pinned?: boolean
+          sort_order?: number
+          student_uuid?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "links_student_uuid_fkey"
+            columns: ["student_uuid"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedule_overrides: {
+        Row: {
+          created_at: string
+          date: string
+          forced_day: number | null
+          id: string
+          kind: string
+          note: string | null
+          student_uuid: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          forced_day?: number | null
+          id?: string
+          kind?: string
+          note?: string | null
+          student_uuid: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          forced_day?: number | null
+          id?: string
+          kind?: string
+          note?: string | null
+          student_uuid?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_overrides_student_uuid_fkey"
+            columns: ["student_uuid"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sessions: {
+        Row: {
+          created_at: string
+          expires_at: string
+          student_uuid: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          student_uuid: string
+          token: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          student_uuid?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sessions_student_uuid_fkey"
+            columns: ["student_uuid"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      settings: {
+        Row: {
+          accent: string
+          clock_24h: boolean
+          notifications: boolean
+          student_uuid: string
+          theme: string
+          updated_at: string
+        }
+        Insert: {
+          accent?: string
+          clock_24h?: boolean
+          notifications?: boolean
+          student_uuid: string
+          theme?: string
+          updated_at?: string
+        }
+        Update: {
+          accent?: string
+          clock_24h?: boolean
+          notifications?: boolean
+          student_uuid?: string
+          theme?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "settings_student_uuid_fkey"
+            columns: ["student_uuid"]
+            isOneToOne: true
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      students: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          pin_hash: string
+          student_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          pin_hash: string
+          student_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          pin_hash?: string
+          student_id?: string
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          class_id: string | null
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          due_date: string | null
+          id: string
+          notes: string | null
+          priority: string
+          student_uuid: string
+          title: string
+        }
+        Insert: {
+          class_id?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          priority?: string
+          student_uuid: string
+          title: string
+        }
+        Update: {
+          class_id?: string | null
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          notes?: string | null
+          priority?: string
+          student_uuid?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_student_uuid_fkey"
+            columns: ["student_uuid"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
