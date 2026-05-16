@@ -7,7 +7,7 @@ import { CLASS_COLORS, colorClasses } from "@/lib/schedule";
 import { toast } from "sonner";
 import { Plus, Trash2, Sparkles, Upload } from "lucide-react";
 
-export const Route = createFileRoute("/schedule")({ component: () => <AppShell><SchedulePage /></AppShell> });
+export const Route = createFileRoute("/classes")({ component: () => <AppShell><SchedulePage /></AppShell> });
 
 type ClassRow = Awaited<ReturnType<typeof listClasses>>[number];
 
