@@ -16,7 +16,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Smart Scheduler" },
       { name: "description", content: "Smart Scheduler is a versatile website to help write down homework, make quick notes, get to important links and more." },
-      { name: "theme-color", content: "#0c2340" },
+      { name: "theme-color", content: "#ffffff" },
       { property: "og:title", content: "Smart Scheduler" },
       { name: "twitter:title", content: "Smart Scheduler" },
       { property: "og:description", content: "Smart Scheduler is a versatile website to help write down homework, make quick notes, get to important links and more." },
@@ -60,7 +60,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <Outlet />
-        <Toaster theme="dark" />
+        <Toaster theme="light" />
       </AuthProvider>
     </QueryClientProvider>
   );
