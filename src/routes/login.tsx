@@ -32,7 +32,7 @@ function LoginPage() {
         studentId: res.student.student_id,
         name: res.student.name,
       });
-      toast.success(mode === "signup" ? "Welcome to DayFlow!" : "Welcome back!");
+      toast.success(mode === "signup" ? "Welcome to Smart Scheduler!" : "Welcome back!");
       navigate({ to: "/" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
@@ -48,7 +48,7 @@ function LoginPage() {
           <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-glow">
             <Sparkles className="h-7 w-7" />
           </div>
-          <h1 className="font-display text-4xl font-bold">DayFlow</h1>
+          <h1 className="font-display text-4xl font-bold">Smart Scheduler</h1>
           <p className="mt-2 text-muted-foreground">Your AI-powered student planner.</p>
         </div>
 

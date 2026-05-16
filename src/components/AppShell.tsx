@@ -34,9 +34,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         <aside className="lg:sticky lg:top-8 lg:h-fit lg:w-64">
           <div className="glass shadow-elegant rounded-2xl p-5">
             <Link to="/" className="mb-6 flex items-center gap-2">
-              <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground font-display font-bold">D</div>
+              <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground font-display font-bold">S</div>
               <div>
-                <div className="font-display text-lg font-semibold leading-tight">DayFlow</div>
+                <div className="font-display text-lg font-semibold leading-tight">Smart Scheduler</div>
                 <div className="text-xs text-muted-foreground">Hi, {student.name.split(" ")[0]}</div>
               </div>
             </Link>
