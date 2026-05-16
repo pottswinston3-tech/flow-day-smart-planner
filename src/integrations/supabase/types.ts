@@ -111,6 +111,39 @@ export type Database = {
           },
         ]
       }
+      notes: {
+        Row: {
+          content: string
+          created_at: string
+          date: string
+          google_event_id: string | null
+          id: string
+          student_uuid: string
+          synced_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          date: string
+          google_event_id?: string | null
+          id?: string
+          student_uuid: string
+          synced_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          date?: string
+          google_event_id?: string | null
+          id?: string
+          student_uuid?: string
+          synced_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       schedule_overrides: {
         Row: {
           created_at: string
@@ -244,10 +277,12 @@ export type Database = {
           completed_at: string | null
           created_at: string
           due_date: string | null
+          google_event_id: string | null
           id: string
           notes: string | null
           priority: string
           student_uuid: string
+          synced_at: string | null
           title: string
         }
         Insert: {
@@ -256,10 +291,12 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           due_date?: string | null
+          google_event_id?: string | null
           id?: string
           notes?: string | null
           priority?: string
           student_uuid: string
+          synced_at?: string | null
           title: string
         }
         Update: {
@@ -268,10 +305,12 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           due_date?: string | null
+          google_event_id?: string | null
           id?: string
           notes?: string | null
           priority?: string
           student_uuid?: string
+          synced_at?: string | null
           title?: string
         }
         Relationships: [

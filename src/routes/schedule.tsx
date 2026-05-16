@@ -1,207 +1,401 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { listClasses, upsertClass, deleteClass, bulkInsertClasses, parseScheduleText } from "@/lib/data.functions";
-import { CLASS_COLORS, colorClasses } from "@/lib/schedule";
+import {
+  listClasses,
+  listTasks,
+  listOverrides,
+  listNotesRange,
+  getNote,
+  upsertNote,
+  gcalStatus,
+  syncTasksToGcal,
+  syncNoteToGcal,
+} from "@/lib/data.functions";
+import {
+  rotatingDay,
+  timeToMinutes,
+  formatTime,
+  ymdLocal,
+  type Override,
+} from "@/lib/schedule";
 import { toast } from "sonner";
-import { Plus, Trash2, Sparkles, Upload } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CalendarCheck,
+  CloudUpload,
+  StickyNote,
+  Loader2,
+} from "lucide-react";
 
-export const Route = createFileRoute("/schedule")({ component: () => <AppShell><SchedulePage /></AppShell> });
+export const Route = createFileRoute("/schedule")({
+  component: () => (
+    <AppShell>
+      <SchedulePage />
+    </AppShell>
+  ),
+});
 
-type ClassRow = Awaited<ReturnType<typeof listClasses>>[number];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function emptyForm(): Omit<ClassRow, "id" | "created_at" | "student_uuid"> & { id?: string } {
-  return { name: "", subject: "", teacher: "", room: "", period: "", days: [], start_time: "08:00", end_time: "08:45", color: "teal", notes: "" };
-}
+function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+function endOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
+function addMonths(d: Date, n: number) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
 
-async function extractPdfText(file: File): Promise<string> {
-  const pdfjs = await import("pdfjs-dist");
-  const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
-  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjs.getDocument({ data: buf }).promise;
-  let text = "";
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const strs = content.items.map((it) => ("str" in it ? it.str : ""));
-    text += strs.join(" ") + "\n";
+function buildGrid(month: Date) {
+  const start = startOfMonth(month);
+  const end = endOfMonth(month);
+  const cells: { date: Date; inMonth: boolean }[] = [];
+  const leading = start.getDay();
+  for (let i = leading - 1; i >= 0; i--) {
+    const d = new Date(start);
+    d.setDate(start.getDate() - i - 1);
+    cells.push({ date: d, inMonth: false });
   }
-  return text;
+  for (let i = 1; i <= end.getDate(); i++) {
+    cells.push({ date: new Date(month.getFullYear(), month.getMonth(), i), inMonth: true });
+  }
+  while (cells.length % 7 !== 0) {
+    const last = cells[cells.length - 1].date;
+    const d = new Date(last);
+    d.setDate(last.getDate() + 1);
+    cells.push({ date: d, inMonth: false });
+  }
+  return cells;
 }
 
 function SchedulePage() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ["classes"], queryFn: () => listClasses() });
-  const [form, setForm] = useState(emptyForm());
-  const [aiText, setAiText] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [month, setMonth] = useState(() => startOfMonth(new Date()));
+  const [selected, setSelected] = useState<string>(ymdLocal(new Date()));
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteDirty, setNoteDirty] = useState(false);
+  const [syncing, setSyncing] = useState<"tasks" | "note" | null>(null);
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (form.days.length === 0) return toast.error("Pick at least one day");
+  const classesQ = useQuery({ queryKey: ["classes"], queryFn: () => listClasses() });
+  const tasksQ = useQuery({ queryKey: ["tasks"], queryFn: () => listTasks() });
+  const overridesQ = useQuery({ queryKey: ["overrides"], queryFn: () => listOverrides() });
+  const gcalQ = useQuery({ queryKey: ["gcal"], queryFn: () => gcalStatus() });
+
+  const monthStart = ymdLocal(startOfMonth(month));
+  const monthEnd = ymdLocal(endOfMonth(month));
+  const notesQ = useQuery({
+    queryKey: ["notes", monthStart, monthEnd],
+    queryFn: () => listNotesRange({ data: { start: monthStart, end: monthEnd } }),
+  });
+
+  const selectedNoteQ = useQuery({
+    queryKey: ["note", selected],
+    queryFn: () => getNote({ data: { date: selected } }),
+  });
+
+  useEffect(() => {
+    setNoteDraft(selectedNoteQ.data?.content ?? "");
+    setNoteDirty(false);
+  }, [selectedNoteQ.data, selected]);
+
+  const overrides = (overridesQ.data ?? []) as Override[];
+  const grid = useMemo(() => buildGrid(month), [month]);
+
+  const tasksByDate = useMemo(() => {
+    const m = new Map<string, typeof tasksQ.data>();
+    for (const t of tasksQ.data ?? []) {
+      if (!t.due_date) continue;
+      const k = ymdLocal(new Date(t.due_date));
+      const arr = m.get(k) ?? [];
+      arr.push(t);
+      m.set(k, arr as never);
+    }
+    return m;
+  }, [tasksQ.data]);
+
+  const notesSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const n of notesQ.data ?? []) if (n.content?.trim()) s.add(n.date);
+    return s;
+  }, [notesQ.data]);
+
+  const selectedDate = useMemo(() => {
+    const [y, m, d] = selected.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }, [selected]);
+
+  const selectedDay = rotatingDay(selectedDate, overrides);
+  const selectedClasses = useMemo(() => {
+    if (!selectedDay || !classesQ.data) return [];
+    return classesQ.data
+      .filter((c) => c.days.includes(selectedDay))
+      .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
+  }, [selectedDay, classesQ.data]);
+
+  const selectedTasks = (tasksByDate.get(selected) ?? []) as NonNullable<typeof tasksQ.data>;
+
+  // 7-day agenda from selected date
+  const agenda = useMemo(() => {
+    const items: { date: string; classes: typeof selectedClasses; tasks: typeof selectedTasks }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(selectedDate);
+      d.setDate(selectedDate.getDate() + i);
+      const key = ymdLocal(d);
+      const day = rotatingDay(d, overrides);
+      const cls = day
+        ? (classesQ.data ?? [])
+            .filter((c) => c.days.includes(day))
+            .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time))
+        : [];
+      const tks = (tasksByDate.get(key) ?? []) as NonNullable<typeof tasksQ.data>;
+      if (cls.length || tks.length) items.push({ date: key, classes: cls as never, tasks: tks });
+    }
+    return items;
+  }, [selectedDate, classesQ.data, overrides, tasksByDate]);
+
+  async function saveNote() {
     try {
-      await upsertClass({ data: form as never });
-      toast.success(form.id ? "Class updated" : "Class added");
-      setForm(emptyForm());
-      qc.invalidateQueries({ queryKey: ["classes"] });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed");
+      await upsertNote({ data: { date: selected, content: noteDraft } });
+      setNoteDirty(false);
+      qc.invalidateQueries({ queryKey: ["notes", monthStart, monthEnd] });
+      qc.invalidateQueries({ queryKey: ["note", selected] });
+      toast.success("Note saved");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save failed");
     }
   }
 
-  async function remove(id: string) {
-    if (!confirm("Delete this class?")) return;
-    await deleteClass({ data: { id } });
-    qc.invalidateQueries({ queryKey: ["classes"] });
-  }
-
-  async function runAI(textOverride?: string) {
-    const text = (textOverride ?? aiText).trim();
-    if (text.length < 10) return toast.error("Paste your schedule first");
-    setAiBusy(true);
+  async function pushTasks() {
+    if (!gcalQ.data?.connected) {
+      toast.error("Connect Google Calendar first (in Settings)");
+      return;
+    }
+    setSyncing("tasks");
     try {
-      const res = await parseScheduleText({ data: { text } });
-      if (res.classes.length === 0) return toast.error("No classes detected");
-      await bulkInsertClasses({ data: { classes: res.classes.map((c) => ({ ...c, color: "teal" })) } });
-      toast.success(`Added ${res.classes.length} classes`);
-      setAiText("");
-      qc.invalidateQueries({ queryKey: ["classes"] });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "AI failed");
+      const res = await syncTasksToGcal();
+      toast.success(`Synced ${res.count} task${res.count === 1 ? "" : "s"} to Google Calendar`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync failed");
     } finally {
-      setAiBusy(false);
+      setSyncing(null);
     }
   }
 
-  async function onPdf(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      return toast.error("Please choose a PDF file");
+  async function pushNote() {
+    if (!gcalQ.data?.connected) {
+      toast.error("Connect Google Calendar first (in Settings)");
+      return;
     }
-    setAiBusy(true);
+    if (noteDirty) await saveNote();
+    setSyncing("note");
     try {
-      toast.message("Reading PDF…");
-      const text = await extractPdfText(file);
-      if (text.trim().length < 10) {
-        toast.error("Couldn't read text from this PDF (scanned image?). Try pasting instead.");
-        return;
-      }
-      await runAI(text);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to read PDF");
+      await syncNoteToGcal({ data: { date: selected } });
+      toast.success("Note synced to Google Calendar");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync failed");
     } finally {
-      setAiBusy(false);
-      if (fileRef.current) fileRef.current.value = "";
+      setSyncing(null);
     }
   }
+
+  const todayKey = ymdLocal(new Date());
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-3xl font-bold">Schedule</h1>
-
-      <section className="bg-card-gradient rounded-2xl p-5 ring-1 ring-border shadow-elegant">
-        <h2 className="mb-3 flex items-center gap-2 font-display font-semibold"><Sparkles className="h-4 w-4 text-primary" /> AI schedule import</h2>
-        <p className="mb-3 text-sm text-muted-foreground">Upload your schedule PDF, or paste the text below. AI will extract classes, days, and times.</p>
-
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <input ref={fileRef} type="file" accept="application/pdf,.pdf" onChange={onPdf} className="hidden" />
-          <button type="button" onClick={() => fileRef.current?.click()} disabled={aiBusy}
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
-            <Upload className="h-4 w-4" /> {aiBusy ? "Working…" : "Upload PDF"}
-          </button>
-          <span className="text-xs text-muted-foreground">PDF must contain selectable text (not a scan).</span>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-bold">Schedule</h1>
+          <p className="text-sm text-muted-foreground">
+            Month view · agenda · daily notes {gcalQ.data?.connected ? "· Google Calendar connected" : "· Google Calendar not connected"}
+          </p>
         </div>
+        <div className="flex gap-2">
+          <button
+            onClick={pushTasks}
+            disabled={syncing === "tasks"}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {syncing === "tasks" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
+            Sync tasks to Google
+          </button>
+        </div>
+      </div>
 
-        <textarea value={aiText} onChange={(e) => setAiText(e.target.value)} rows={5} placeholder="…or paste your schedule here" className="w-full rounded-xl bg-surface-2 border border-border p-3 text-sm" />
-        <button onClick={() => runAI()} disabled={aiBusy} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
-          {aiBusy ? "Analyzing…" : "Extract classes from text"}
-        </button>
-      </section>
-
-      <section className="bg-card-gradient rounded-2xl p-5 ring-1 ring-border shadow-elegant">
-        <h2 className="mb-3 font-display font-semibold">{form.id ? "Edit class" : "Add a class"}</h2>
-        <form onSubmit={save} className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Input label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required className="col-span-2" />
-          <Input label="Teacher" value={form.teacher ?? ""} onChange={(v) => setForm({ ...form, teacher: v })} />
-          <Input label="Room" value={form.room ?? ""} onChange={(v) => setForm({ ...form, room: v })} />
-          <Input label="Subject" value={form.subject ?? ""} onChange={(v) => setForm({ ...form, subject: v })} />
-          <Input label="Period" value={form.period ?? ""} onChange={(v) => setForm({ ...form, period: v })} />
-          <Input label="Start" type="time" value={form.start_time} onChange={(v) => setForm({ ...form, start_time: v })} required />
-          <Input label="End" type="time" value={form.end_time} onChange={(v) => setForm({ ...form, end_time: v })} required />
-          <div className="col-span-2 md:col-span-2">
-            <div className="mb-1.5 text-sm font-medium">Days</div>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4].map((d) => {
-                const on = form.days.includes(d);
-                return (
-                  <button type="button" key={d} onClick={() => setForm({ ...form, days: on ? form.days.filter((x) => x !== d) : [...form.days, d].sort() })}
-                    className={`h-10 w-10 rounded-xl text-sm font-semibold ring-1 ${on ? "bg-primary text-primary-foreground ring-primary" : "bg-surface-2 ring-border text-muted-foreground"}`}>
-                    {d}
-                  </button>
-                );
-              })}
-            </div>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Calendar */}
+        <section className="bg-card-gradient ring-1 ring-border shadow-elegant rounded-2xl p-4 lg:col-span-2">
+          <header className="mb-3 flex items-center justify-between">
+            <button onClick={() => setMonth(addMonths(month, -1))} className="rounded-lg p-2 hover:bg-surface-2"><ChevronLeft className="h-4 w-4" /></button>
+            <h2 className="font-display text-lg font-semibold">
+              {month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+            </h2>
+            <button onClick={() => setMonth(addMonths(month, 1))} className="rounded-lg p-2 hover:bg-surface-2"><ChevronRight className="h-4 w-4" /></button>
+          </header>
+          <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            {WEEKDAYS.map((d) => <div key={d} className="py-1.5">{d}</div>)}
           </div>
-          <div className="col-span-2 md:col-span-2">
-            <div className="mb-1.5 text-sm font-medium">Color</div>
-            <div className="flex flex-wrap gap-2">
-              {CLASS_COLORS.map((c) => {
-                const cc = colorClasses(c);
-                return (
-                  <button key={c} type="button" onClick={() => setForm({ ...form, color: c })} className={`h-8 w-8 rounded-lg ${cc.dot} ${form.color === c ? "ring-2 ring-foreground" : ""}`} />
-                );
-              })}
-            </div>
-          </div>
-          <div className="col-span-2 flex gap-2 md:col-span-4">
-            <button type="submit" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"><Plus className="h-4 w-4" /> {form.id ? "Save" : "Add class"}</button>
-            {form.id && <button type="button" onClick={() => setForm(emptyForm())} className="rounded-xl bg-surface-2 px-4 py-2 text-sm">Cancel</button>}
-          </div>
-        </form>
-      </section>
-
-      <section className="bg-card-gradient rounded-2xl p-5 ring-1 ring-border shadow-elegant">
-        <h2 className="mb-3 font-display font-semibold">All classes</h2>
-        {q.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : (q.data?.length ?? 0) === 0 ? (
-          <p className="text-sm text-muted-foreground">No classes yet — add some above or use AI import.</p>
-        ) : (
-          <ul className="space-y-2">
-            {q.data!.map((c) => {
-              const cc = colorClasses(c.color);
+          <div className="grid grid-cols-7 gap-1">
+            {grid.map(({ date, inMonth }) => {
+              const key = ymdLocal(date);
+              const day = rotatingDay(date, overrides);
+              const tCount = (tasksByDate.get(key)?.length ?? 0);
+              const hasNote = notesSet.has(key);
+              const isSelected = key === selected;
+              const isToday = key === todayKey;
               return (
-                <li key={c.id} className={`flex items-center gap-3 rounded-xl ${cc.bg} ring-1 ${cc.ring} p-3`}>
-                  <span className={`h-2.5 w-2.5 rounded-full ${cc.dot}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium truncate">{c.name}</span>
-                      <span className="text-xs text-muted-foreground">{c.days.map((d) => `D${d}`).join(" · ")}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {[c.teacher, c.room && `Room ${c.room}`, `${c.start_time}–${c.end_time}`].filter(Boolean).join(" · ")}
-                    </div>
+                <button
+                  key={key}
+                  onClick={() => setSelected(key)}
+                  className={[
+                    "relative flex aspect-square flex-col items-stretch justify-between rounded-lg border p-1.5 text-left text-xs transition",
+                    inMonth ? "bg-card" : "bg-surface-2/40 text-muted-foreground",
+                    isSelected ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-primary/40",
+                  ].join(" ")}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={isToday ? "font-bold text-primary" : "font-medium"}>{date.getDate()}</span>
+                    {day && (
+                      <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                        D{day}
+                      </span>
+                    )}
                   </div>
-                  <button onClick={() => setForm({ ...c, subject: c.subject ?? "", teacher: c.teacher ?? "", room: c.room ?? "", period: c.period ?? "", notes: c.notes ?? "" })} className="rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs">Edit</button>
-                  <button onClick={() => remove(c.id)} className="rounded-lg bg-surface-2 p-1.5 text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
-                </li>
+                  <div className="flex items-center gap-1">
+                    {tCount > 0 && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-900">
+                        {tCount}
+                      </span>
+                    )}
+                    {hasNote && <StickyNote className="h-3 w-3 text-muted-foreground" />}
+                  </div>
+                </button>
               );
             })}
-          </ul>
-        )}
-      </section>
-    </div>
-  );
-}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-primary" /> Today</span>
+            <span className="inline-flex items-center gap-1"><span className="rounded bg-primary/10 px-1 text-primary font-semibold">D#</span> Rotation day</span>
+            <span className="inline-flex items-center gap-1"><span className="rounded bg-amber-100 px-1 text-amber-900">#</span> Tasks due</span>
+            <span className="inline-flex items-center gap-1"><StickyNote className="h-3 w-3" /> Has note</span>
+          </div>
+        </section>
 
-function Input({ label, value, onChange, type = "text", required, className }: { label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; className?: string }) {
-  return (
-    <label className={`block ${className ?? ""}`}>
-      <div className="mb-1 text-sm font-medium">{label}</div>
-      <input type={type} value={value} required={required} onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl bg-surface-2 border border-border px-3 py-2 text-sm outline-none focus:border-primary" />
-    </label>
+        {/* Selected day detail */}
+        <section className="bg-card-gradient ring-1 ring-border shadow-elegant rounded-2xl p-5">
+          <h2 className="font-display text-lg font-semibold">
+            {selectedDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+          </h2>
+          <div className="mt-1 text-sm text-muted-foreground">
+            {selectedDay ? `Day ${selectedDay}` : "No school"} ·{" "}
+            {selectedClasses.length} class{selectedClasses.length === 1 ? "" : "es"} · {selectedTasks.length} task{selectedTasks.length === 1 ? "" : "s"}
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {selectedClasses.length > 0 && (
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Classes</div>
+                <ul className="space-y-1.5">
+                  {selectedClasses.map((c) => (
+                    <li key={c.id} className="flex items-center justify-between rounded-lg bg-surface-2/60 px-3 py-2 text-sm">
+                      <span className="truncate">{c.name}</span>
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {formatTime(c.start_time, false)} – {formatTime(c.end_time, false)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {selectedTasks.length > 0 && (
+              <div>
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tasks due</div>
+                <ul className="space-y-1.5">
+                  {selectedTasks.map((t) => (
+                    <li key={t.id} className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm ring-1 ring-amber-200">
+                      <CalendarCheck className="h-4 w-4 text-amber-700" />
+                      <span className={`flex-1 truncate ${t.completed ? "line-through text-muted-foreground" : ""}`}>{t.title}</span>
+                      <span className="text-[10px] uppercase text-amber-800">{t.priority}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link to="/tasks" className="mt-2 inline-block text-xs text-primary hover:underline">Open tasks →</Link>
+              </div>
+            )}
+
+            {selectedClasses.length === 0 && selectedTasks.length === 0 && (
+              <div className="rounded-lg bg-surface-2/50 p-4 text-sm text-muted-foreground">Nothing scheduled.</div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Notepad + Agenda */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <section className="bg-card-gradient ring-1 ring-border shadow-elegant rounded-2xl p-5 lg:col-span-2">
+          <header className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-lg font-semibold inline-flex items-center gap-2">
+                <StickyNote className="h-4 w-4 text-primary" /> Notes — {selected}
+              </h2>
+              <p className="text-xs text-muted-foreground">Auto-saved per day. Push to Google Calendar to share with your calendar.</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={saveNote}
+                disabled={!noteDirty}
+                className="rounded-xl bg-surface-2 px-3 py-1.5 text-sm disabled:opacity-50"
+              >
+                {noteDirty ? "Save" : "Saved"}
+              </button>
+              <button
+                onClick={pushNote}
+                disabled={syncing === "note"}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+              >
+                {syncing === "note" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CloudUpload className="h-3.5 w-3.5" />}
+                Sync
+              </button>
+            </div>
+          </header>
+          <textarea
+            value={noteDraft}
+            onChange={(e) => { setNoteDraft(e.target.value); setNoteDirty(true); }}
+            rows={10}
+            placeholder="Jot down homework reminders, ideas, questions for class…"
+            className="w-full rounded-xl border border-border bg-card p-3 text-sm outline-none focus:border-primary"
+          />
+        </section>
+
+        <section className="bg-card-gradient ring-1 ring-border shadow-elegant rounded-2xl p-5">
+          <h2 className="font-display text-lg font-semibold">Next 7 days</h2>
+          {agenda.length === 0 ? (
+            <p className="mt-3 text-sm text-muted-foreground">Nothing in the next week.</p>
+          ) : (
+            <ol className="mt-3 space-y-3">
+              {agenda.map((a) => {
+                const d = new Date(a.date);
+                return (
+                  <li key={a.date}>
+                    <button
+                      onClick={() => setSelected(a.date)}
+                      className="w-full rounded-lg border border-border bg-card p-3 text-left text-sm hover:border-primary/40"
+                    >
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="font-semibold">{d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {a.classes.length}c · {a.tasks.length}t
+                        </span>
+                      </div>
+                      {a.tasks.slice(0, 2).map((t) => (
+                        <div key={t.id} className="truncate text-xs text-muted-foreground">• {t.title}</div>
+                      ))}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </section>
+      </div>
+    </div>
   );
 }

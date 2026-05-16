@@ -14,6 +14,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LinksRouteImport } from './routes/links'
+import { Route as ClassesRouteImport } from './routes/classes'
 import { Route as IndexRouteImport } from './routes/index'
 
 const TasksRoute = TasksRouteImport.update({
@@ -41,6 +42,11 @@ const LinksRoute = LinksRouteImport.update({
   path: '/links',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ClassesRoute = ClassesRouteImport.update({
+  id: '/classes',
+  path: '/classes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -49,6 +55,7 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/classes': typeof ClassesRoute
   '/links': typeof LinksRoute
   '/login': typeof LoginRoute
   '/schedule': typeof ScheduleRoute
@@ -57,6 +64,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/classes': typeof ClassesRoute
   '/links': typeof LinksRoute
   '/login': typeof LoginRoute
   '/schedule': typeof ScheduleRoute
@@ -66,6 +74,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/classes': typeof ClassesRoute
   '/links': typeof LinksRoute
   '/login': typeof LoginRoute
   '/schedule': typeof ScheduleRoute
@@ -74,12 +83,27 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/links' | '/login' | '/schedule' | '/settings' | '/tasks'
+  fullPaths:
+    | '/'
+    | '/classes'
+    | '/links'
+    | '/login'
+    | '/schedule'
+    | '/settings'
+    | '/tasks'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/links' | '/login' | '/schedule' | '/settings' | '/tasks'
+  to:
+    | '/'
+    | '/classes'
+    | '/links'
+    | '/login'
+    | '/schedule'
+    | '/settings'
+    | '/tasks'
   id:
     | '__root__'
     | '/'
+    | '/classes'
     | '/links'
     | '/login'
     | '/schedule'
@@ -89,6 +113,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ClassesRoute: typeof ClassesRoute
   LinksRoute: typeof LinksRoute
   LoginRoute: typeof LoginRoute
   ScheduleRoute: typeof ScheduleRoute
@@ -133,6 +158,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LinksRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/classes': {
+      id: '/classes'
+      path: '/classes'
+      fullPath: '/classes'
+      preLoaderRoute: typeof ClassesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -145,6 +177,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ClassesRoute: ClassesRoute,
   LinksRoute: LinksRoute,
   LoginRoute: LoginRoute,
   ScheduleRoute: ScheduleRoute,

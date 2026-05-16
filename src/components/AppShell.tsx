@@ -1,11 +1,12 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, type ReactNode } from "react";
-import { LayoutDashboard, CalendarDays, ListChecks, Link as LinkIcon, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, CalendarDays, BookOpen, ListChecks, Link as LinkIcon, Settings, LogOut } from "lucide-react";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/schedule", label: "Schedule", icon: CalendarDays },
+  { to: "/classes", label: "Classes", icon: BookOpen },
   { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/links", label: "Links", icon: LinkIcon },
   { to: "/settings", label: "Settings", icon: Settings },

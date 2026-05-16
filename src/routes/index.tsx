@@ -86,7 +86,7 @@ function Dashboard() {
       </div>
 
       {/* Today's schedule */}
-      <Card title="Today's schedule" action={<Link to="/schedule" className="text-sm text-primary hover:underline">Edit →</Link>}>
+      <Card title="Today's schedule" action={<Link to="/classes" className="text-sm text-primary hover:underline">Edit →</Link>}>
         {todays.length === 0 ? (
           <Empty msg="No classes for this day yet. Add some in Schedule." />
         ) : (
