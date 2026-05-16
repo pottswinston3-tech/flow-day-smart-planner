@@ -31,7 +31,7 @@ async function extractPdfText(file: File): Promise<string> {
   return text;
 }
 
-function SchedulePage() {
+function ClassesPage() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["classes"], queryFn: () => listClasses() });
   const [form, setForm] = useState(emptyForm());
@@ -101,7 +101,7 @@ function SchedulePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-3xl font-bold">Schedule</h1>
+      <h1 className="font-display text-3xl font-bold">Classes</h1>
 
       <section className="bg-card-gradient rounded-2xl p-5 ring-1 ring-border shadow-elegant">
         <h2 className="mb-3 flex items-center gap-2 font-display font-semibold"><Sparkles className="h-4 w-4 text-primary" /> AI schedule import</h2>

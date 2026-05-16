@@ -113,14 +113,18 @@ export type ClassColor = (typeof CLASS_COLORS)[number];
 
 export function colorClasses(color: string): { bg: string; ring: string; text: string; dot: string } {
   const map: Record<string, { bg: string; ring: string; text: string; dot: string }> = {
-    teal: { bg: "bg-teal-500/15", ring: "ring-teal-400/40", text: "text-teal-200", dot: "bg-teal-400" },
-    sky: { bg: "bg-sky-500/15", ring: "ring-sky-400/40", text: "text-sky-200", dot: "bg-sky-400" },
-    indigo: { bg: "bg-indigo-500/15", ring: "ring-indigo-400/40", text: "text-indigo-200", dot: "bg-indigo-400" },
-    violet: { bg: "bg-violet-500/15", ring: "ring-violet-400/40", text: "text-violet-200", dot: "bg-violet-400" },
-    rose: { bg: "bg-rose-500/15", ring: "ring-rose-400/40", text: "text-rose-200", dot: "bg-rose-400" },
-    amber: { bg: "bg-amber-500/15", ring: "ring-amber-400/40", text: "text-amber-200", dot: "bg-amber-400" },
-    emerald: { bg: "bg-emerald-500/15", ring: "ring-emerald-400/40", text: "text-emerald-200", dot: "bg-emerald-400" },
-    slate: { bg: "bg-slate-500/15", ring: "ring-slate-400/40", text: "text-slate-200", dot: "bg-slate-400" },
+    teal: { bg: "bg-teal-50", ring: "ring-teal-200", text: "text-teal-800", dot: "bg-teal-500" },
+    sky: { bg: "bg-sky-50", ring: "ring-sky-200", text: "text-sky-800", dot: "bg-sky-500" },
+    indigo: { bg: "bg-indigo-50", ring: "ring-indigo-200", text: "text-indigo-800", dot: "bg-indigo-500" },
+    violet: { bg: "bg-violet-50", ring: "ring-violet-200", text: "text-violet-800", dot: "bg-violet-500" },
+    rose: { bg: "bg-rose-50", ring: "ring-rose-200", text: "text-rose-800", dot: "bg-rose-500" },
+    amber: { bg: "bg-amber-50", ring: "ring-amber-200", text: "text-amber-800", dot: "bg-amber-500" },
+    emerald: { bg: "bg-emerald-50", ring: "ring-emerald-200", text: "text-emerald-800", dot: "bg-emerald-500" },
+    slate: { bg: "bg-slate-50", ring: "ring-slate-200", text: "text-slate-800", dot: "bg-slate-500" },
   };
   return map[color] ?? map.teal;
+}
+
+export function ymdLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
