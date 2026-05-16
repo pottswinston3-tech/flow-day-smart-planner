@@ -3,11 +3,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { listClasses, upsertClass, deleteClass, bulkInsertClasses, parseScheduleText } from "@/lib/data.functions";
-import { CLASS_COLORS, colorClasses } from "@/lib/schedule";
+import { CLASS_COLORS, colorClasses } from "@/lib/classes";
 import { toast } from "sonner";
 import { Plus, Trash2, Sparkles, Upload } from "lucide-react";
 
-export const Route = createFileRoute("/classes")({ component: () => <AppShell><SchedulePage /></AppShell> });
+export const Route = createFileRoute("/classes")({ component: () => <AppShell><ClassesPage /></AppShell> });
 
 type ClassRow = Awaited<ReturnType<typeof listClasses>>[number];
 
