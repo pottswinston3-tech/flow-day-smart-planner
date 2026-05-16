@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LinksRouteImport } from './routes/links'
 import { Route as ClassesRouteImport } from './routes/classes'
@@ -24,6 +25,11 @@ const TasksRoute = TasksRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScheduleRoute = ScheduleRouteImport.update({
+  id: '/schedule',
+  path: '/schedule',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/classes': typeof ClassesRoute
   '/links': typeof LinksRoute
   '/login': typeof LoginRoute
+  '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
   '/tasks': typeof TasksRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/classes': typeof ClassesRoute
   '/links': typeof LinksRoute
   '/login': typeof LoginRoute
+  '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
   '/tasks': typeof TasksRoute
 }
@@ -69,20 +77,36 @@ export interface FileRoutesById {
   '/classes': typeof ClassesRoute
   '/links': typeof LinksRoute
   '/login': typeof LoginRoute
+  '/schedule': typeof ScheduleRoute
   '/settings': typeof SettingsRoute
   '/tasks': typeof TasksRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/classes' | '/links' | '/login' | '/settings' | '/tasks'
+  fullPaths:
+    | '/'
+    | '/classes'
+    | '/links'
+    | '/login'
+    | '/schedule'
+    | '/settings'
+    | '/tasks'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/classes' | '/links' | '/login' | '/settings' | '/tasks'
+  to:
+    | '/'
+    | '/classes'
+    | '/links'
+    | '/login'
+    | '/schedule'
+    | '/settings'
+    | '/tasks'
   id:
     | '__root__'
     | '/'
     | '/classes'
     | '/links'
     | '/login'
+    | '/schedule'
     | '/settings'
     | '/tasks'
   fileRoutesById: FileRoutesById
@@ -92,6 +116,7 @@ export interface RootRouteChildren {
   ClassesRoute: typeof ClassesRoute
   LinksRoute: typeof LinksRoute
   LoginRoute: typeof LoginRoute
+  ScheduleRoute: typeof ScheduleRoute
   SettingsRoute: typeof SettingsRoute
   TasksRoute: typeof TasksRoute
 }
@@ -110,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/schedule': {
+      id: '/schedule'
+      path: '/schedule'
+      fullPath: '/schedule'
+      preLoaderRoute: typeof ScheduleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -148,9 +180,20 @@ const rootRouteChildren: RootRouteChildren = {
   ClassesRoute: ClassesRoute,
   LinksRoute: LinksRoute,
   LoginRoute: LoginRoute,
+  ScheduleRoute: ScheduleRoute,
   SettingsRoute: SettingsRoute,
   TasksRoute: TasksRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
