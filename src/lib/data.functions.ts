@@ -393,3 +393,167 @@ Only include real class entries. Output JSON only — no markdown.`;
     if (!parsed.success) throw new Error("AI output did not match schema");
     return parsed.data;
   });
+
+/* NOTES (daily notepad) */
+const noteSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  content: z.string().max(20000).default(""),
+});
+
+export const listNotesRange = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({
+      start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const s = await requireSession();
+    const { data: rows, error } = await supabaseAdmin
+      .from("notes")
+      .select("*")
+      .eq("student_uuid", s.studentUuid)
+      .gte("date", data.start)
+      .lte("date", data.end);
+    if (error) throw new Error(error.message);
+    return rows ?? [];
+  });
+
+export const getNote = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(d))
+  .handler(async ({ data }) => {
+    const s = await requireSession();
+    const { data: row } = await supabaseAdmin
+      .from("notes")
+      .select("*")
+      .eq("student_uuid", s.studentUuid)
+      .eq("date", data.date)
+      .maybeSingle();
+    return row;
+  });
+
+export const upsertNote = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => noteSchema.parse(d))
+  .handler(async ({ data }) => {
+    const s = await requireSession();
+    const { error } = await supabaseAdmin
+      .from("notes")
+      .upsert(
+        { student_uuid: s.studentUuid, date: data.date, content: data.content, updated_at: new Date().toISOString() },
+        { onConflict: "student_uuid,date" },
+      );
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/* GOOGLE CALENDAR SYNC */
+const GCAL_GATEWAY = "https://connector-gateway.lovable.dev/google_calendar/calendar/v3";
+
+async function gcalFetch(path: string, init: RequestInit = {}) {
+  const lov = process.env.LOVABLE_API_KEY;
+  const gcal = process.env.GOOGLE_CALENDAR_API_KEY;
+  if (!lov) throw new Error("LOVABLE_API_KEY is not configured");
+  if (!gcal) throw new Error("Google Calendar is not connected yet");
+  const resp = await fetch(`${GCAL_GATEWAY}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${lov}`,
+      "X-Connection-Api-Key": gcal,
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+  const text = await resp.text();
+  const json = text ? JSON.parse(text) : {};
+  if (!resp.ok) {
+    console.error("gcal error", resp.status, text);
+    throw new Error(`Google Calendar error [${resp.status}]: ${json?.error?.message ?? text}`);
+  }
+  return json;
+}
+
+export const gcalStatus = createServerFn({ method: "GET" }).handler(async () => {
+  await requireSession();
+  return { connected: Boolean(process.env.GOOGLE_CALENDAR_API_KEY) };
+});
+
+export const syncTasksToGcal = createServerFn({ method: "POST" }).handler(async () => {
+  const s = await requireSession();
+  const { data: tasks } = await supabaseAdmin
+    .from("tasks")
+    .select("*")
+    .eq("student_uuid", s.studentUuid)
+    .not("due_date", "is", null);
+  if (!tasks || tasks.length === 0) return { ok: true, count: 0 };
+
+  let count = 0;
+  for (const t of tasks) {
+    const due = new Date(t.due_date as string);
+    const end = new Date(due.getTime() + 30 * 60_000);
+    const body = {
+      summary: `📚 ${t.title}`,
+      description: `${t.notes ?? ""}\nPriority: ${t.priority}${t.completed ? "\n✅ Completed" : ""}`,
+      start: { dateTime: due.toISOString() },
+      end: { dateTime: end.toISOString() },
+    };
+    try {
+      if (t.google_event_id) {
+        await gcalFetch(`/calendars/primary/events/${encodeURIComponent(t.google_event_id)}`, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        });
+      } else {
+        const ev = await gcalFetch(`/calendars/primary/events`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        await supabaseAdmin
+          .from("tasks")
+          .update({ google_event_id: ev.id, synced_at: new Date().toISOString() })
+          .eq("id", t.id);
+      }
+      count++;
+    } catch (e) {
+      console.error("sync task failed", t.id, e);
+    }
+  }
+  return { ok: true, count };
+});
+
+export const syncNoteToGcal = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).parse(d))
+  .handler(async ({ data }) => {
+    const s = await requireSession();
+    const { data: note } = await supabaseAdmin
+      .from("notes")
+      .select("*")
+      .eq("student_uuid", s.studentUuid)
+      .eq("date", data.date)
+      .maybeSingle();
+    if (!note || !note.content.trim()) throw new Error("Nothing to sync — note is empty");
+
+    const body = {
+      summary: `📝 Notes — ${data.date}`,
+      description: note.content,
+      start: { date: data.date },
+      end: { date: data.date },
+    };
+    let eventId = note.google_event_id as string | null;
+    if (eventId) {
+      await gcalFetch(`/calendars/primary/events/${encodeURIComponent(eventId)}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+    } else {
+      const ev = await gcalFetch(`/calendars/primary/events`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      eventId = ev.id;
+    }
+    await supabaseAdmin
+      .from("notes")
+      .update({ google_event_id: eventId, synced_at: new Date().toISOString() })
+      .eq("id", note.id);
+    return { ok: true };
+  });
